@@ -1,17 +1,15 @@
-tempo real versao sequencial = 6,850
-tempo real versao paralela com 1 thread = 6,857
-tempo real versao paralela com 2 threads = 3,576
-tempo real versao paralela com 4 threads = 1,938
-tempo real versao paralela com 8 threads = 1,184
-tempo real versao paralela com 16 threads = 0,974
+tempo real versao sequencial = 5,977
+tempo real versao paralela com 2 threads = 3,275
+tempo real versao paralela com 4 threads = 1,762
+tempo real versao paralela com 8 threads = 1,286
+tempo real versao paralela com 16 threads = 0,825
 
-speedup 1 thread = 6,850/6,857 = 0,998
-speedup 2 threads = 6,850/3,576 = 1,915
-speedup 4 threads = 6,850/1,938 = 3,534
-speedup 8 threads = 6,850/1,184 = 5,785
-speedup 16 threads = 6,850/0,974 = 7,032
+speedup 2 threads = 5,977/3,275 = 1,825
+speedup 4 threads = 5,977/1,762 = 3,393
+speedup 8 threads = 5,977/1,286 = 4,648
+speedup 16 threads = 5,977/0,825 = 7,245
 
 Configuracoes da maquina
-ryzen 5 5600
-rtx 3050ti
+ryzen 5 8600
+rx 7600
 32 gb ram

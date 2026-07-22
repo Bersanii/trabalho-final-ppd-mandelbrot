@@ -63,74 +63,80 @@ for (int i = 0; i < width; i += d) {
 }
 ```
 
-Na versão paralela, adicionamos a diretiva `omp parallel for` no laço externo:
+Na versão paralela, utilizamos uma única região paralela envolvendo todas as etapas de refinamento da imagem.
 
 ```cpp
-#pragma omp parallel for schedule(dynamic)
-for (int i = 0; i < width; i += d) {
-    for (int j = 0; j < height; j += d) {
-        ...
+#pragma omp parallel
+{
+    while (d > 0) {
+
+        #pragma omp for schedule(dynamic)
+        for (int i = 0; i < width; i += d) {
+            for (int j = 0; j < height; j += d) {
+                ...
+            }
+        }
+
+        #pragma omp single
+        {
+            d /= 2;
+        }
+
+        #pragma omp barrier
     }
 }
 ```
 
-Aplicamos a paralelização no laço da variavel `i`, que percorre a largura da imagem. Fizemos essa escolha porque cada iteração do lado externo trabalha sobre uma faixa diferente da imagem. Dessa forma, diferentes threads trabalham sobre regiões distintas do fractal ao mesmo tempo
+Aplicamos a paralelização no laço da variável `i`, que percorre a largura da imagem. Fizemos essa escolha porque cada iteração do laço externo trabalha sobre uma faixa diferente da imagem. Dessa forma, diferentes threads processam regiões distintas do fractal simultaneamente, reduzindo os riscos de conflitos de escrita.
 
-O laço mais interno, indicado pela variável `j` foi mantido sequencial. O motivo disso está no fato de que cada thread recebe uma parte da largura da imagem e assim percorre a altura correspondente normalmente. Essa estratégia faz com que reduza os riscos de conflitos de escrita.
-
-O laço externo de refinamento, indicado pela variável `d`, não foi paralelizado. O motivo disso é que o algoritmo trabalha com etapas sucessivas, começando com blocos grandes e depois refinando a imagem com blocos menores. Como cada etapa depende do valor anterior de `d`, então mantivemos essa parte sequencial
-
-O motivo para usarmos `schedule(dynamic)` foi porque o custo de calcular pontos do conjunto de mandelbrot pode variar. Alguns pontos escapam mais rapidamente, enquanto outros exigem mais iterações. Com o escalonamento feito de maneira dinâmica, quando uma thread termina a sua parte, ela pode receber novas iterações, melhorando o balanceamento da carga de trabalho.
+Foi utilizada uma única região paralela envolvendo todo o laço controlado pela variável `d`. Dentro dessa região, utilizamos `#pragma omp for schedule(dynamic)` para distribuir as iterações entre as threads. Ao final de cada etapa, apenas uma thread atualiza o valor de `d` através da diretiva `single`, enquanto a barreira garante que todas as threads concluíram o processamento antes do próximo refinamento.
 
 ## 6. Alterações realizadas
 
 As principais alterações feitas foram:
 
 - Inclusão da biblioteca OpenMP no arquivo `mandelbrot.cpp`;
-- Adição da diretiva `#pragma omp parallel for schedule(dynamic)` no laço externo da função `create()`;
+- Criação de uma única região paralela na função `create()`;
+- Utilização das diretivas `omp for`, `single` e `barrier` para sincronizar as etapas de refinamento;
+- Utilização de `schedule(dynamic)` para balanceamento de carga entre as threads;
 - Alteração do `Makefile` para compilar com a flag `-fopenmp`;
-- Execução controlada pela variável de ambiente `OMP_NUM_THREADS`;
+- Execução controlada pela variável de ambiente `OMP_NUM_THREADS`.
 
 ## 7. Resultados
 
 Os resultamos foram obtidos rodando em uma máquina com as seguintes especificações:
 
-- Sistema operacional: Zorin OS 18.1
-- Processador: Ryzen 5 5600
-- Placa de vídeo: RTX 3050TI
+- Sistema operacional: Fedora-44
+- Processador: Ryzen 5 8600
+- Placa de vídeo: RX 7600
 - Memória Ram: 32 gb
 
 Medições feitas:
 
 | Versão     | Threads | Tempo real (s) | Speedup |
 | ---------- | :-----: | :------------: | :-----: |
-| Sequencial | 1       | 6,950          | -       |
-| OpenMP     | 1       | 6,857          | 0,998   |
-| OpenMP     | 2       | 3,546          | 1,915   |
-| OpenMP     | 4       | 1,938          | 3,534   |
-| OpenMP     | 8       | 1,184          | 5,785   |
-| OpenMP     | 16      | 0,974          | 7,032   |
+| Sequencial | 1       | 5,977          | -       |
+| OpenMP     | 2       | 3,275          | 1,825   |
+| OpenMP     | 4       | 1,762          | 3,393   |
+| OpenMP     | 8       | 1,286          | 4,648   |
+| OpenMP     | 16      | 0,825          | 7,245   |
 
 ## 8. Discussão dos speedups
 
 Os resultados mostram que a paralelização do problema **Mandelbrot** trouxe ganho significativo de desempenho. Comparando a execução da versão sequencial em comparação a versão paralelizada com 16 threads, foi atingido um speedup de 7,032 vezes.
 
-Com **1 thread** a versão com OpenMP apresentou um speedup de **0,998**. Isso sugere que a simples presença do OpenMP praticamente não alterou o desempenho em comparação a versão sequencial.
+Com **2 threads**, a versão paralela apresentou um speedup de **1,825**, valor próximo ao ideal teórico de 2. Isso indica que a maior parte do tempo de execução é dedicada à região paralelizável do algoritmo.
 
-Com **2 threads** a versão com OpenMP apresentou um speepup de **1,915**. Esse valor é muito próximo do valor ideal de 2 threads, em que o ideal teórico seria um speedup de 2 vezes. Isso indica que a parte paralelizada representa grande parte do tempo total da aplicação
+Com **4 threads**, foi obtido um speedup de **3,393**. Embora o ganho permaneça expressivo, ele já se distancia um pouco do valor ideal de 4 devido aos custos associados ao gerenciamento das threads, sincronizações e à parcela sequencial do algoritmo.
 
-Com **4 threads** a versão com OpenMP apresentou um speedup de **3,534**. O ganho ainda é significativo, mas se encontra um pouco mais longe do ideal teórico, que seria de 4 vezes. Isso pode ocorrer por conta dos custos relacionados ao gerenciamento das threads, sincronização de laços paralelos e partes do programa que são sequenciais.
+Com **8 threads**, o speedup alcançou **4,648**. O desempenho continua melhorando, porém observa-se uma redução na escalabilidade. Isso ocorre porque o aumento do número de threads intensifica custos como sincronização, acesso à memória compartilhada e competição pelos recursos do processador.
 
-Com **8 threads** a versão com OpenMP apresentou um speedup de **5,785**. O ganho continua crescendo, mas ele diminuiu e se encontra distante do ideal teórico, que seria de 8 vezes. Isso indica que conforme aumentamos o número de threads, a escalabilidade de ganho de desempenho reduz.
-
-Com **16 threads** a versão com OpenMp apresentou um speedup de **7,032**. Com essa quantidade de threads, foi obtido o menor tempo possível para o problema, tivemos assim como com 8 threads, uma redução na escalabilidade de ganho de desempenho.
-
-Essa redução ela é prevista em programas paralelos. Pois mesmo quando a maior parte do processamento relacionado ao problema seja paralelizável, existem trechos sequenciais, existem os custos de criação e gerenciamento de threads, acessos a memória compartilhada entre outras coisas que afetam o desempenho e fazem com que o speedup se encontre longe do ideal teórico.
+Com **16 threads**, foi obtido o melhor resultado, com speedup de **7,245**. A utilização de uma única região paralela ao longo de toda a execução contribuiu para reduzir o overhead de criação e destruição das equipes de threads, permitindo um melhor aproveitamento dos recursos disponíveis. Ainda assim, o speedup permanece abaixo do ideal devido às partes inerentemente sequenciais do algoritmo e às limitações impostas pela Lei de Amdahl.
 
 ## 9. Conclusão
 
-Com base nos resultados apresentados, podemos concluir que a paralelização do problema Mandelbrot utilizando OpenMp foi eficiente e apresentou redução significativa no tempo de execulção. Ao paralelizarmos o laço externo da funlão create(), permitimos distribuir o calculo de diferentes regiões da imagem entre múltiplas threads sem alteração da lógica do algoritmo.
+Com base nos resultados apresentados, podemos concluir que a paralelização do problema Mandelbrot utilizando OpenMp foi eficiente e apresentou redução significativa no tempo de execução. Ao paralelizarmos o laço externo da funlão create(), permitimos distribuir o calculo de diferentes regiões da imagem entre múltiplas threads sem alteração da lógica do algoritmo.
 
-O melhor resultado foi obtido utilizando **16 threads**, reduzindo um tempo de execução de **6,950 s** para **0,974 s**. Isso corresponde a um speedup de aproximadamente **7,032 vezes**.
+O melhor resultado foi obtido utilizando **16 threads**, reduzindo um tempo de execução de **5,977 s** para **0,825 s**. Isso corresponde a um speedup de aproximadamente **7,245 vezes**.
 
 Assim, apesar do speedup não ser linear para grandes quantidades de threads, os resultados obtidos mostram que a aplicação se beneficia bastante com a paralelização, devido ao fato de o cálculo dos pontos da fractal apresentar a parte mais custosa do programa.

@@ -243,28 +243,50 @@ void mandelbrot::create() {
 	int d = 1;
 	while (d < width || d < height)
 		d <<= 1;
-	do {
-		#pragma omp parallel for schedule(dynamic)
-		for (int i = 0; i < width; i += d) {
-			for (int j = 0; j < height; j += d) {
-				if (i % (d << 1) == 0 && j % (d << 1) == 0
-						&& (i != 0 || j != 0))
-					continue;
-				char newColor = valueAt(low_x + i * scale, low_y + j * scale);
-				if (*(img + (i * height) + j) == 0
-						|| newColor != *(img + (i * height) + j)) {
-					fill(i, height - j - d, d, d, newColor);
-					for (int s = 0; s < d; ++s)
-						if (i + s < width)
-							for (int t = 0; t < d; ++t)
-								if (j + t < height)
-									*(img + (height * (i + s)) + j + t) =
-											newColor; //c[i + s][j + t] = newColor;
+	#pragma omp parallel
+	{
+		while (true) {
+
+			#pragma omp for schedule(dynamic)
+			for (int i = 0; i < width; i += d) {
+
+				for (int j = 0; j < height; j += d) {
+
+					if (i % (d << 1) == 0 &&
+						j % (d << 1) == 0 &&
+						(i != 0 || j != 0))
+						continue;
+
+					char newColor =
+						valueAt(low_x + i * scale,
+								low_y + j * scale);
+
+					if (*(img + (i * height) + j) == 0 ||
+						newColor != *(img + (i * height) + j)) {
+
+						fill(i, height - j - d, d, d, newColor);
+
+						for (int s = 0; s < d; ++s)
+							if (i + s < width)
+								for (int t = 0; t < d; ++t)
+									if (j + t < height)
+										*(img + (height * (i + s)) + j + t)
+											= newColor;
+					}
 				}
 			}
+
+			#pragma omp single
+			{
+				d /= 2;
+			}
+
+			#pragma omp barrier
+
+			if (d == 0)
+				break;
 		}
-		d /= 2;
-	} while (d > 0);
+	}
 
 	update = false;
 }
